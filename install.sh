@@ -70,7 +70,7 @@ REPORT="/tmp/mtr_report_${TARGET//[^a-zA-Z0-9_.-]/_}.txt"
 
 echo "[*] 正在测试：$TARGET"
 echo "[*] mtr -rwzbc $COUNT $TARGET"
-echo "💫 开始检测（预计 ${COUNT/10}~${COUNT/5} 秒）"
+echo "💫 开始检测（请耐心等待）"
 
 spin='-\|/'
 i=0
