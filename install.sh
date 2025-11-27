@@ -407,7 +407,7 @@ END{
   for(c in bb_t3){ ft3=1; break }
 
   if(!ft1 && !ft2 && !ft3){
-    print ""- 未从主机名中识别出明显骨干网/运营商（可能隐藏 / 内网 / 自建网）。"
+    print "- 未从主机名中识别出明显骨干网/运营商（可能隐藏 / 内网 / 自建网）。"
   } else {
     if(ft1){
       print "- Tier1 Backbone："
