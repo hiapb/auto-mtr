@@ -207,7 +207,7 @@ BEGIN{
   prev=avg
 
   dest_avg=avg+0
-  dest_loss=loss+0       # 强制转为数值
+  dest_loss=loss+0
   dest_stdev=stdev+0
   dest_host=host
   dest_best=best+0
