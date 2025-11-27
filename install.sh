@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # hipb
-# 一键 mtr + 自动国家地区识别 + ipinfo 源/目标归属地 + 跨境判断 + 骨干识别 + 评分
+# 一键 mtr + 自动国家地区识别 + ipinfo 源/目标归属地 + 跨境判断 + 骨干识别 (T1/T2/T3) + 评分
 
 set -e
 
@@ -180,69 +180,55 @@ function region(c){
   return "OT"
 }
 
-# -------- 骨干识别（扩展版） --------
-function detect_carrier(host,    h){
+# -------- 骨干识别（只管骨干，区分 T1/T2/T3） --------
+# 返回: "T1|NTT" / "T2|China Telecom" / "T3|GSL"
+function detect_backbone(host,    h){
   h = tolower(host)
 
-  # ==== 日本相关 ====
-  if (h ~ /ntt\.net|\.ntt\.com/)               return "NTT"
-  if (h ~ /kddi\.ne\.jp|\.kddi\.com|kddi/)     return "KDDI"
-  if (h ~ /softbank|bbtec\.net/)              return "SoftBank"
-  if (h ~ /iij\.net/)                         return "IIJ"
+  # ==== Tier1 ====
+  if (h ~ /ntt\.net|\.ntt\.com/)               return "T1|NTT"
+  if (h ~ /telia|se\.telia\.net|arelion/)      return "T1|Telia/Arelion"
+  if (h ~ /gtt\.net/)                          return "T1|GTT"
+  if (h ~ /cogentco\.com|\.cogent\./)          return "T1|Cogent"
+  if (h ~ /he\.net|hurricane/)                 return "T1|Hurricane Electric"
+  if (h ~ /level3|l3net|centurylink|lumen/)    return "T1|Lumen/Level3"
+  if (h ~ /zayo/)                              return "T1|Zayo"
+  if (h ~ /tatacommunications|tata\.|seabone/) return "T1|Tata/Sparkle"
+  if (h ~ /orange|opentransit|oti/)            return "T1|Orange"
+  if (h ~ /verizon|alter\.net/)                return "T1|Verizon"
+  if (h ~ /comcast/)                           return "T1|Comcast"
 
-  # ==== 中国三大运营商 / 国际出口 ====
-  # China Telecom
-  if (h ~ /chinatelecom|chinanet|ctc|cn2|\.ctc\./)  return "China Telecom"
-  # China Unicom
-  if (h ~ /chinaunicom|cucc|cuc\.cn|unicom/)        return "China Unicom"
-  # China Mobile / CMI（你上面已经有 CMI，这里顺手并起来）
-  if (h ~ /chinamobile|cmcc|cmi\.chinamobile\.com|cmi\.hk|cmi\./) return "China Mobile/CMI"
+  # ==== Tier2：三大+区域大网+大云/CDN 等 ====
+  if (h ~ /chinatelecom|chinanet|ctc|cn2|\.ctc\./)                 return "T2|China Telecom"
+  if (h ~ /chinaunicom|cucc|cuc\.cn|unicom/)                       return "T2|China Unicom"
+  if (h ~ /chinamobile|cmcc|cmi\.chinamobile\.com|cmi\.hk|cmi\./)  return "T2|China Mobile/CMI"
 
-  # ==== 香港 / 新加坡 / 区域运营商 ====
-  if (h ~ /pccw|netvigator/)                  return "PCCW"
-  if (h ~ /hgc\.com\.hk|hgc/)                 return "HGC"
-  if (h ~ /akari\-network|akari\.net|as38136/)return "Akari Networks"  # Akari
-  if (h ~ /jinx\.cloud|rfchost/)             return "JINX/RFCHOST"    # Jinx 这类商家
-  if (h ~ /singtel|asean\.ix|starhub/)       return "Singtel/SG Carrier"
-  if (h ~ /hkbn|bwbn|wizcloud/)              return "HKBN"
+  if (h ~ /pccw|netvigator/)                  return "T2|PCCW"
+  if (h ~ /hgc\.com\.hk|hgc/)                 return "T2|HGC"
+  if (h ~ /hkbn|bwbn|wizcloud/)              return "T2|HKBN"
+  if (h ~ /singtel|asean\.ix|starhub/)       return "T2|Singtel/SG Carrier"
+  if (h ~ /kt\.co\.kr|kornet/)               return "T2|KT"
+  if (h ~ /skbroadband|sk broadband/)        return "T2|SK Broadband"
+  if (h ~ /telstra|pacificnet/)              return "T2|Telstra"
+  if (h ~ /retn\.net/)                       return "T2|RETN"
+  if (h ~ /vodafone|cable-wireless|cw\.net/) return "T2|Vodafone/C&W"
+  if (h ~ /iij\.net/)                        return "T2|IIJ"
+  if (h ~ /softbank|bbtec\.net/)             return "T2|SoftBank"
+  if (h ~ /kddi\.ne\.jp|\.kddi\.com|kddi/)   return "T2|KDDI"
 
-  # ==== 韩国 ====
-  if (h ~ /kt\.co\.kr|kornet/)               return "KT"
-  if (h ~ /skbroadband|sk broadband/)        return "SK Broadband"
+  # 大云/CDN 也当作 T2 级骨干
+  if (h ~ /google|1e100\.net|googlenet/)     return "T2|Google"
+  if (h ~ /amazonaws|aws/)                   return "T2|AWS"
+  if (h ~ /cloudflare|warp|cf-ns/)           return "T2|Cloudflare"
+  if (h ~ /facebook|fbcdn|tfbnw/)            return "T2|Meta/Facebook"
+  if (h ~ /akamai|akam\.net/)                return "T2|Akamai"
+  if (h ~ /edgecast|fastly/)                 return "T2|EdgeCast/Fastly"
 
-  # ==== 澳洲 / 其他区域骨干 ====
-  if (h ~ /telstra|pacificnet/)              return "Telstra"
-  if (h ~ /retn\.net/)                       return "RETN"
-  if (h ~ /vodafone|cable-wireless|cw\.net/) return "Vodafone/C&W"
-
-  # ==== 全球常见 Tier1 / 大骨干 ====
-  if (h ~ /telia|se\.telia\.net|arelion/)    return "Telia/Arelion"
-  if (h ~ /gtt\.net/)                        return "GTT"
-  if (h ~ /cogentco\.com|\.cogent\./)        return "Cogent"
-  if (h ~ /he\.net|hurricane/)               return "Hurricane Electric"
-  if (h ~ /level3|l3net|centurylink|lumen/)  return "Lumen/Level3"
-  if (h ~ /zayo/)                            return "Zayo"
-  if (h ~ /tatacommunications|tata\.|seabone/)return "Tata/Sparkle"
-  if (h ~ /comcast/)                         return "Comcast"
-  if (h ~ /verizon|alter\.net/)              return "Verizon"
-  if (h ~ /orange|opentransit|oti/)          return "Orange"
-
-  # ==== CDN / 云厂商大网（有时也会当“骨干段”用） ====
-  if (h ~ /google|1e100\.net|googlenet/)     return "Google"
-  if (h ~ /amazonaws|aws/)                   return "AWS"
-  if (h ~ /cloudflare|warp|cf-ns/)           return "Cloudflare"
-  if (h ~ /facebook|fbcdn|tfbnw/)            return "Meta/Facebook"
-  if (h ~ /akamai|akam\.net/)               return "Akamai"
-  if (h ~ /edgecast|fastly/)                return "CDN (EdgeCast/Fastly)"
-
-  # ==== 你线路里经常出现的商家 ====
-  if (h ~ /gsl|globalsecurelayer/)          return "GSL"
-  if (h ~ /nube\.sh/)                       return "Nube"
-  if (h ~ /dmit\.com/)                      return "DMIT"
+  # ==== Tier3 / 小骨干（你可以继续往这加） ====
+  if (h ~ /gsl|globalsecurelayer/)           return "T3|GSL"
 
   return ""
 }
-
 
 BEGIN{
   hop=0
@@ -265,8 +251,16 @@ BEGIN{
   h_region[hop]=region(h_country[hop])
   h_host[hop]=host
 
-  car=detect_carrier(host)
-  if(car!="") carriers[car]=1
+  # 骨干识别
+  bb = detect_backbone(host)
+  if(bb!=""){
+    split(bb, tmp, "|")
+    tier = tmp[1]
+    name = tmp[2]
+    if(tier=="T1") bb_t1[name]=1
+    else if(tier=="T2") bb_t2[name]=1
+    else if(tier=="T3") bb_t3[name]=1
+  }
 
   if(prev>=0){
     diff=avg-prev
@@ -404,11 +398,30 @@ END{
   } else print "- 未发现明显延迟跳升点。"
   print ""
 
-  # ------- 骨干运营商 -------
-  print "🏢 骨干 / 运营商识别"
-  found=0
-  for(c in carriers){ print "- " c; found=1 }
-  if(!found) print "- 未从主机名中识别出明显骨干（可能隐藏或自建网）。"
+  # ------- 骨干展示（按 T1/T2/T3） -------
+  print "🏢 骨干/运营商识别 "
+
+  ft1=0; ft2=0; ft3=0
+  for(c in bb_t1){ ft1=1; break }
+  for(c in bb_t2){ ft2=1; break }
+  for(c in bb_t3){ ft3=1; break }
+
+  if(!ft1 && !ft2 && !ft3){
+    print ""- 未从主机名中识别出明显骨干网/运营商（可能隐藏 / 内网 / 自建网）。"
+  } else {
+    if(ft1){
+      print "- Tier1 Backbone："
+      for(c in bb_t1) printf("  · %s\n", c)
+    }
+    if(ft2){
+      print "- Tier2 / Regional / Cloud Backbone："
+      for(c in bb_t2) printf("  · %s\n", c)
+    }
+    if(ft3){
+      print "- Tier3 / 小骨干："
+      for(c in bb_t3) printf("  · %s\n", c)
+    }
+  }
   print ""
 
   # ------- 评分 -------
@@ -429,6 +442,7 @@ END{
 
   printf("⭐ 综合线路评分：%.0f / 100\n",score)
   print "（说明：评分基于区域评级 + 抖动 + 丢包的简单模型，仅供参考。）"
+  print ""
 }
 ' "$REPORT"
 
