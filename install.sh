@@ -52,14 +52,14 @@ REPORT="/tmp/mtr_report_${TARGET//[^a-zA-Z0-9_.-]/_}.txt"
 
 echo "[*] 正在测试：$TARGET"
 echo "[*] mtr -rwzbc $COUNT $TARGET"
-echo "⏳ 正在测速（预计 ${COUNT/10}~${COUNT/5} 秒）..."
+echo "⏳ 正在检测（预计 ${COUNT/10}~${COUNT/5} 秒）"
 
 spin='-\|/'
 i=0
 (
   while true; do
     i=$(( (i+1)%4 ))
-    printf "\r运行中... %s" "${spin:$i:1}"
+    printf "\r💫 检测分析运行中... %s" "${spin:$i:1}"
     sleep 0.2
   done
 )&
@@ -73,7 +73,7 @@ else
 fi
 
 kill $SPIN >/dev/null 2>&1
-echo -e "\n✔ 测试完成\n"
+echo -e "\n✔ 检测完成\n"
 
 echo "================ 原始 MTR 报告 ================"
 cat "$REPORT"
