@@ -1,18 +1,17 @@
 #!/usr/bin/env bash
 # hipb
-# 一键 mtr + 自动国家地区识别 + ipinfo 源/目标归属地 + 跨境判断 + 骨干识别 (T1/T2/T3) + 评分
+# 一键 MTR + 国家地区识别 + ipinfo 源/目标归属地 + 骨干识别 (T1/T2/T3) + 禁 ICMP / 不可达识别 + 评分
 
 set -e
 
-command_exists() {
-  command -v "$1" >/dev/null 2>&1
-}
+# ---------------- 基础函数 ----------------
+command_exists() { command -v "$1" >/dev/null 2>&1; }
 
 install_mtr() {
   echo "[*] 正在检查 mtr 是否已安装..."
   if command_exists mtr; then
     echo "[✓] 已检测到 mtr"
-    return 0
+    return
   fi
 
   echo "[*] 未检测到 mtr，自动安装中..."
@@ -49,19 +48,15 @@ COUNT=${COUNT:-100}
 read -rp "是否显示原始 MTR 报告？(y/N): " SHOW_RAW
 SHOW_RAW=${SHOW_RAW,,}
 
-# ---------- 利用 ipinfo.io 获取本机 & 目标归属地 ----------
+# ---------------- ipinfo 查询 ----------------
 echo "[*] 正在获取本机 IP 归属地..."
 SRC_INFO=$(curl -s ipinfo.io || true)
-
-SRC_IP=$(printf '%s\n' "$SRC_INFO" | awk -F'"' '/"ip":/ {print $4; exit}')
 SRC_COUNTRY=$(printf '%s\n' "$SRC_INFO" | awk -F'"' '/"country":/ {print $4; exit}')
 SRC_CITY=$(printf '%s\n' "$SRC_INFO" | awk -F'"' '/"city":/ {print $4; exit}')
 SRC_ORG=$(printf '%s\n' "$SRC_INFO" | awk -F'"' '/"org":/ {print $4; exit}')
 
 echo "[*] 正在获取目标 IP 归属地..."
 DST_INFO=$(curl -s "ipinfo.io/$TARGET" || true)
-
-DST_IP=$(printf '%s\n' "$DST_INFO" | awk -F'"' '/"ip":/ {print $4; exit}')
 DST_COUNTRY=$(printf '%s\n' "$DST_INFO" | awk -F'"' '/"country":/ {print $4; exit}')
 DST_CITY=$(printf '%s\n' "$DST_INFO" | awk -F'"' '/"city":/ {print $4; exit}')
 DST_ORG=$(printf '%s\n' "$DST_INFO" | awk -F'"' '/"org":/ {print $4; exit}')
@@ -80,17 +75,16 @@ i=0
     printf "\r⏳ 检测分析运行中... %s" "${spin:$i:1}"
     sleep 0.2
   done
-)&
-
+) &
 SPIN=$!
 
 if [ "$EUID" -ne 0 ]; then
-  sudo mtr -rwzbc $COUNT "$TARGET" > "$REPORT"
+  sudo mtr -rwzbc "$COUNT" "$TARGET" > "$REPORT"
 else
-  mtr -rwzbc $COUNT "$TARGET" > "$REPORT"
+  mtr -rwzbc "$COUNT" "$TARGET" > "$REPORT"
 fi
 
-kill $SPIN >/dev/null 2>&1
+kill "$SPIN" >/dev/null 2>&1 || true
 echo -e "\n✔ 检测完成\n"
 
 if [ "$SHOW_RAW" = "y" ] || [ "$SHOW_RAW" = "yes" ]; then
@@ -102,6 +96,7 @@ fi
 
 echo "================ 自动分析报告 ================"
 
+# ---------------- AWK 分析逻辑 ----------------
 awk -v SRC_COUNTRY="$SRC_COUNTRY" \
     -v SRC_CITY="$SRC_CITY" \
     -v SRC_ORG="$SRC_ORG" \
@@ -109,7 +104,6 @@ awk -v SRC_COUNTRY="$SRC_COUNTRY" \
     -v DST_CITY="$DST_CITY" \
     -v DST_ORG="$DST_ORG" '
 # -------- 国家识别（用于每跳，大致判断区域用） --------
-
 function detect_country(host,    h) {
   h=tolower(host)
 
@@ -166,7 +160,7 @@ function detect_country(host,    h) {
   return "UN"
 }
 
-# -------- 区域 --------
+# -------- 区域大类 --------
 function region(c){
   if (c ~ /HK|TW|CN|JP|KR/) return "EAS"
   if (c ~ /SG|MY|TH|PH|ID|VN|LA|KH|MM|BN|TL/) return "SEAS"
@@ -180,12 +174,12 @@ function region(c){
   return "OT"
 }
 
-# -------- 骨干识别（只管骨干，区分 T1/T2/T3） --------
+# -------- 骨干识别（T1/T2/T3） --------
 # 返回: "T1|NTT" / "T2|China Telecom" / "T3|GSL"
 function detect_backbone(host,    h){
   h = tolower(host)
 
-  # ==== Tier1 ====
+  # Tier1
   if (h ~ /ntt\.net|\.ntt\.com/)               return "T1|NTT"
   if (h ~ /telia|se\.telia\.net|arelion/)      return "T1|Telia/Arelion"
   if (h ~ /gtt\.net/)                          return "T1|GTT"
@@ -198,11 +192,10 @@ function detect_backbone(host,    h){
   if (h ~ /verizon|alter\.net/)                return "T1|Verizon"
   if (h ~ /comcast/)                           return "T1|Comcast"
 
-  # ==== Tier2：三大+区域大网+大云/CDN 等 ====
+  # Tier2：区域骨干 + 三大 + 大云/CDN
   if (h ~ /chinatelecom|chinanet|ctc|cn2|\.ctc\./)                 return "T2|China Telecom"
   if (h ~ /chinaunicom|cucc|cuc\.cn|unicom/)                       return "T2|China Unicom"
   if (h ~ /chinamobile|cmcc|cmi\.chinamobile\.com|cmi\.hk|cmi\./)  return "T2|China Mobile/CMI"
-
   if (h ~ /pccw|netvigator/)                  return "T2|PCCW"
   if (h ~ /hgc\.com\.hk|hgc/)                 return "T2|HGC"
   if (h ~ /hkbn|bwbn|wizcloud/)              return "T2|HKBN"
@@ -216,7 +209,6 @@ function detect_backbone(host,    h){
   if (h ~ /softbank|bbtec\.net/)             return "T2|SoftBank"
   if (h ~ /kddi\.ne\.jp|\.kddi\.com|kddi/)   return "T2|KDDI"
 
-  # 大云/CDN 也当作 T2 级骨干
   if (h ~ /google|1e100\.net|googlenet/)     return "T2|Google"
   if (h ~ /amazonaws|aws/)                   return "T2|AWS"
   if (h ~ /cloudflare|warp|cf-ns/)           return "T2|Cloudflare"
@@ -224,7 +216,7 @@ function detect_backbone(host,    h){
   if (h ~ /akamai|akam\.net/)                return "T2|Akamai"
   if (h ~ /edgecast|fastly/)                 return "T2|EdgeCast/Fastly"
 
-  # ==== Tier3 / 小骨干（你可以继续往这加） ====
+  # Tier3
   if (h ~ /gsl|globalsecurelayer/)           return "T3|GSL"
 
   return ""
@@ -232,8 +224,10 @@ function detect_backbone(host,    h){
 
 BEGIN{
   hop=0
-  prev=-1
+  prev_avg=0
   maxJump=0
+  maxHop=0
+  alive_hops=0
 }
 
 # -------- 解析每跳 --------
@@ -241,15 +235,15 @@ BEGIN{
   hop++
   host=$3
   loss=$(NF-6); gsub(/%/,"",loss)
-  last=$(NF-4)
   avg=$(NF-3)
-  best=$(NF-2)
-  wrst=$(NF-1)
   stdev=$NF
 
-  h_country[hop]=detect_country(host)
-  h_region[hop]=region(h_country[hop])
   h_host[hop]=host
+  h_loss[hop]=loss+0
+  h_avg[hop]=avg+0
+  h_stdev[hop]=stdev+0
+
+  if (loss+0 < 100) alive_hops++
 
   # 骨干识别
   bb = detect_backbone(host)
@@ -262,187 +256,183 @@ BEGIN{
     else if(tier=="T3") bb_t3[name]=1
   }
 
-  if(prev>=0){
-    diff=avg-prev
-    if(diff>maxJump){
-      maxJump=diff; maxHop=hop
+  # 延迟跳变
+  if(hop>1){
+    diff = (avg+0) - prev_avg
+    if(diff > maxJump){
+      maxJump = diff
+      maxHop  = hop
     }
   }
-  prev=avg
+  prev_avg = avg+0
 
-  dest_avg=avg+0
-  dest_loss=loss+0
-  dest_stdev=stdev+0
-  dest_host=host
-  dest_best=best+0
-  dest_wrst=wrst+0
+  # 记录末跳
+  dest_host  = host
+  dest_loss  = loss+0
+  dest_avg   = avg+0
+  dest_stdev = stdev+0
 }
 
 END{
-  # --- 先用 hop 粗略推 src/dst（作为 ipinfo 失败时的 fallback） ---
-  src_hop="UN"
-  maxCnt=0
-  for(i=1;i<=hop && i<=3;i++){
-    c=h_country[i]
-    if(c!="UN"){
-      srcCount[c]++
-      if(srcCount[c]>maxCnt){maxCnt=srcCount[c];src_hop=c}
-    }
-  }
-  if(src_hop=="UN"){
-    for(i=1;i<=hop;i++){
-      if(h_country[i]!="UN"){src_hop=h_country[i];break}
-    }
+  # ---------------- 完全不可达：所有跳都是 100% 丢包 ----------------
+  if (alive_hops == 0 || hop == 0){
+    print "🗺 IP 归属地"
+    if (SRC_COUNTRY != "")
+      printf("- 本机: %s %s [%s]\n", SRC_COUNTRY,SRC_CITY,SRC_ORG)
+    else
+      print "- 本机: 未获取到 IP 归属地"
+
+    print "- 目标: 未获取（全链路无任何 ICMP 返回）\n"
+
+    print "📍 目标节点: 无法获取（全链路 100% 丢包）"
+    print "📡 丢包率  : 100%"
+    print "⏱ 延迟统计: 无法获取\n"
+
+    print "⚙ 延迟评价"
+    print "- 综合延迟评价: 不可用"
+    print "- 说明: 自首跳起即无任何 ICMP 响应，线路中断或被防火墙完全屏蔽。\n"
+
+    print "📉 丢包评价"
+    print "- 全链路 100% 丢包，可能："
+    print "  · 目标完全宕机或未上线"
+    print "  · 黑洞路由（RTBH）或上游丢弃"
+    print "  · 区域性防火墙策略丢弃 ICMP\n"
+
+    print "🧩 可能瓶颈点"
+    print "- 无法分析（没有任何可用跳）\n"
+
+    print "🏢 骨干 / 运营商识别"
+    print "- 无可识别骨干（无路由信息）\n"
+
+    print "⭐ 综合线路评分：0 / 100"
+    print "（说明：全链路不可达。）"
+    exit
   }
 
-  dst_hop="UN"
-  maxCnt=0
-  for(i=hop;i>=1 && i>=hop-2;i--){
-    c=h_country[i]
-    if(c!="UN"){
-      dstCount[c]++
-      if(dstCount[c]>maxCnt){maxCnt=dstCount[c];dst_hop=c}
-    }
-  }
-  if(dst_hop=="UN"){
-    for(i=hop;i>=1;i--){
-      if(h_country[i]!="UN"){dst_hop=h_country[i];break}
-    }
-  }
-
-  # --- 真正用于区域判断 / 评分的 src/dst：优先用 ipinfo ---
-  src = (SRC_COUNTRY != "" ? SRC_COUNTRY : src_hop)
-  dst = (DST_COUNTRY != "" ? DST_COUNTRY : dst_hop)
-
-  sR = region(src)
-  dR = region(dst)
-
-  # --- ipinfo 归属地展示 ---
+  # ---------------- 归属地展示 ----------------
   print "🗺 IP 归属地"
   if (SRC_COUNTRY != "")
-    printf("- 本机: %s %s [%s]\n", SRC_COUNTRY, SRC_CITY, SRC_ORG)
+    printf("- 本机: %s %s [%s]\n", SRC_COUNTRY,SRC_CITY,SRC_ORG)
   else
     print "- 本机: 未获取到 IP 归属地"
+
   if (DST_COUNTRY != "")
-    printf("- 目标: %s %s [%s]\n\n", DST_COUNTRY, DST_CITY, DST_ORG)
+    printf("- 目标: %s %s [%s]\n\n", DST_COUNTRY,DST_CITY,DST_ORG)
   else
     print "- 目标: 未获取到 IP 归属地\n"
 
-  # --- 总体延迟 / 丢包 ---
-  printf("📍 目标节点: %s\n", dest_host)
+  # ---------------- 修正目标节点名称：避免 ??? ----------------
+  real_dest = dest_host
+  if (real_dest == "???"){
+    for(i=hop;i>=1;i--){
+      if(h_host[i] != "???"){
+        real_dest = h_host[i] " (no ICMP reply from final dest)"
+        break
+      }
+    }
+    if(real_dest == "???") real_dest = "未知节点 (无有效主机名)"
+  }
+
+  printf("📍 目标节点: %s\n", real_dest)
   printf("📡 丢包率  : %.1f%%\n", dest_loss)
-  printf("⏱ 延迟统计: Avg=%.1f ms, Best=%.1f ms, Worst=%.1f ms, 抖动=%.2f ms\n\n",
-         dest_avg,dest_best,dest_wrst,dest_stdev)
+  printf("⏱ 延迟统计: Avg=%.1f ms, 抖动=%.2f ms\n\n", dest_avg, dest_stdev)
 
-  print "🌍 区域判断"
-  print "- 源端国家: " src " (" sR ")"
-  print "- 目标国家: " dst " (" dR ")"
-  print ""
-
-  # ------- 延迟评价（区域规则） -------
+  # ---------------- 延迟 & 稳定性 & 丢包 评价 ----------------
   print "⚙ 延迟评价"
-  avg=dest_avg
+  rating = ""
+  explain = ""
 
-  if(src==dst && src!="UN"){
-    if(avg<=2){rate="极佳";comm="同机房 / 同城极限延迟。"}
-    else if(avg<=5){rate="优秀";comm="本地骨干质量优秀，适合延迟敏感业务。"}
-    else if(avg<=10){rate="良好";comm="本地延迟正常，多数业务可用。"}
-    else{rate="一般";comm="同国延迟偏高，可能绕路。"}
-  }
-  else if( (src=="HK"&&dst=="SG") || (src=="SG"&&dst=="HK") ){
-    if(avg<=35){rate="优秀";comm="港↔新 优质直连骨干水平。"}
-    else if(avg<=50){rate="良好";comm="港↔新 正常水平。"}
-    else{rate="偏高";comm="港↔新 延迟偏高，疑似绕路。"}
-  }
-  else if( (sR=="EAS"&&dst=="JP") || (dR=="EAS"&&src=="JP") ){
-    if(avg<=25){rate="优秀";comm="东亚↔日本 顶级线路水准。"}
-    else if(avg<=35){rate="良好";comm="东亚↔日本 正常水平。"}
-    else{rate="偏高";comm="东亚↔日本 延迟偏高，可能绕路。"}
-  }
-  else if( sR=="EAS"&&dR=="NA" || sR=="SEAS"&&dR=="NA" ||
-           dR=="EAS"&&sR=="NA" || dR=="SEAS"&&sR=="NA" ){
-    if(avg<=160){rate="优秀";comm="亚↔美 跨太平洋优质线路。"}
-    else if(avg<=220){rate="良好";comm="亚↔美 常规水平。"}
-    else{rate="偏高";comm="亚↔美 延迟偏高，疑似绕路。"}
-  }
-  else{
-    if(avg<=70){rate="大致良好";comm="整体 RTT 不高，多数业务可接受。"}
-    else if(avg<=120){rate="一般";comm="延迟中等，适合非极端敏感业务。"}
-    else{rate="较差";comm="延迟较高，建议仅作备线 / 非实时业务。"}
-  }
-
-  print "- 综合延迟评价: " rate
-  print "- 说明: " comm
-  print ""
-
-  # ------- 稳定性 -------
-  print "📈 稳定性评价"
-  if(dest_stdev<=2) print "- 抖动很小，线路非常稳定。"
-  else if(dest_stdev<=8) print "- 抖动中等，偶尔会有尖峰。"
-  else print "- 抖动较大，网络波动明显。"
-  print ""
-
-  # ------- 丢包 -------
-  print "📉 丢包评价"
-  if(dest_loss <= 0.0001)       print "- 末跳无丢包，连通性良好。"
-  else if(dest_loss < 3)        print "- 少量丢包（<3%），大部分业务可接受。"
-  else                           print "- 丢包偏高，需谨慎用于关键业务。"
-  print ""
-
-  # ------- 瓶颈点 -------
-  print "🧩 可能瓶颈点（跨境 / 出海处）"
-  if(maxHop>1){
-    print "- 跳数: 第 " maxHop " 跳"
-    print "- 节点: " h_host[maxHop]
-    printf("  ↑ 平均延迟在此处增加约 %.1f ms\n",maxJump)
-  } else print "- 未发现明显延迟跳升点。"
-  print ""
-
-  # ------- 骨干展示（按 T1/T2/T3） -------
-  print "🏢 骨干/运营商识别 "
-
-  ft1=0; ft2=0; ft3=0
-  for(c in bb_t1){ ft1=1; break }
-  for(c in bb_t2){ ft2=1; break }
-  for(c in bb_t3){ ft3=1; break }
-
-  if(!ft1 && !ft2 && !ft3){
-    print "- 未从主机名中识别出明显骨干网/运营商（可能隐藏 / 内网 / 自建网）。"
+  if (dest_loss >= 80){
+    rating  = "不可用"
+    explain = "末跳几乎不响应 ICMP，目标可能禁 ping 或丢弃 ICMP，只能参考前几跳质量。"
   } else {
-    if(ft1){
+    if (dest_avg <= 10)      { rating="极佳"; explain="延迟极低，适合延迟敏感业务。"}
+    else if (dest_avg <=30 ) { rating="优秀"; explain="延迟较低，体验良好。"}
+    else if (dest_avg <=80 ) { rating="一般"; explain="延迟中等，多数业务可接受。"}
+    else                     { rating="较差"; explain="延迟较高，实时性业务体验会较差。"}
+  }
+
+  print "- 综合延迟评价: " rating
+  print "- 说明: " explain
+  print ""
+
+  print "📈 稳定性评价"
+  if (dest_loss >= 80){
+    print "- 由于末跳不响应 ICMP，无法准确评估抖动，仅可参考前几跳。"
+  } else if (dest_stdev <= 2){
+    print "- 抖动很小，线路非常稳定。"
+  } else if (dest_stdev <= 8){
+    print "- 抖动中等，偶尔有波动。"
+  } else {
+    print "- 抖动较大，网络存在明显波动。"
+  }
+  print ""
+
+  print "📉 丢包评价"
+  if (dest_loss >= 80){
+    print "- 末跳 ICMP 丢包率接近 100%，更像是禁 ping / 防火墙策略，而非纯粹链路质量问题。"
+  } else if (dest_loss <= 0.1){
+    print "- 基本无丢包，连通性良好。"
+  } else if (dest_loss < 3){
+    print "- 少量丢包（<3%），大部分业务可接受。"
+  } else {
+    print "- 丢包偏高，关键业务需谨慎使用。"
+  }
+  print ""
+
+  # ---------------- 瓶颈点 ----------------
+  print "🧩 可能瓶颈点（跨境 / 出海处附近）"
+  if (maxHop > 1 && maxJump > 3){
+    printf("- 跳数: 第 %d 跳\n", maxHop)
+    printf("- 节点: %s\n", h_host[maxHop])
+    printf("  ↑ 平均延迟在此处增加约 %.1f ms\n\n", maxJump)
+  } else {
+    print "- 未发现明显的单点延迟跃升。"
+    print ""
+  }
+
+  # ---------------- 骨干展示 ----------------
+  print "🏢 骨干 / 运营商识别（基于主机名关键字，可能不完全准确）"
+
+  has_t1=0; has_t2=0; has_t3=0
+  for(c in bb_t1){ has_t1=1; break }
+  for(c in bb_t2){ has_t2=1; break }
+  for(c in bb_t3){ has_t3=1; break }
+
+  if(!has_t1 && !has_t2 && !has_t3){
+    print "- 未从主机名中识别出明显骨干网（可能为内网或未做反向解析）。"
+  } else {
+    if(has_t1){
       print "- Tier1 Backbone："
       for(c in bb_t1) printf("  · %s\n", c)
     }
-    if(ft2){
-      print "- Tier2 / Regional / Cloud Backbone："
+    if(has_t2){
+      print "- Tier2 / 区域骨干 / 云网："
       for(c in bb_t2) printf("  · %s\n", c)
     }
-    if(ft3){
+    if(has_t3){
       print "- Tier3 / 小骨干："
       for(c in bb_t3) printf("  · %s\n", c)
     }
   }
   print ""
 
-  # ------- 评分 -------
+  # ---------------- 评分 ----------------
   base=60
-  if(rate=="极佳") base=95
-  else if(rate=="优秀") base=90
-  else if(rate=="良好") base=80
-  else if(rate=="大致良好") base=70
-  else if(rate=="一般") base=60
-  else if(rate=="偏高") base=50
-  else if(rate=="较差") base=30
+  if (rating=="极佳") base=95
+  else if (rating=="优秀") base=85
+  else if (rating=="一般") base=65
+  else if (rating=="较差") base=45
+  else if (rating=="不可用") base=15
 
-  score=base
+  score = base
   score -= dest_stdev * 2
-  score -= dest_loss * 3
-  if(score<0) score=0
-  if(score>100) score=100
+  score -= dest_loss * 1.5
+  if (score < 0) score=0
+  if (score > 100) score=100
 
-  printf("⭐ 综合线路评分：%.0f / 100\n",score)
-  print "（说明：评分基于区域评级 + 抖动 + 丢包的简单模型，仅供参考。）"
-  print ""
+  printf("⭐ 综合线路评分：%.0f / 100\n", score)
+  print "（说明：评分基于末跳延迟/抖动/丢包的简单模型，仅供参考，真实体验请结合业务实际情况。）"
 }
 ' "$REPORT"
 
