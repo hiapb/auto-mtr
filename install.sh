@@ -47,7 +47,7 @@ read -rp "探测次数（默认 100）: " COUNT
 COUNT=${COUNT:-100}
 
 read -rp "是否显示原始 MTR 报告？(y/N): " SHOW_RAW
-SHOW_RAW=${SHOW_RAW,,}   # 转小写
+SHOW_RAW=${SHOW_RAW,,}
 
 # ---------- 利用 ipinfo.io 获取本机 & 目标归属地 ----------
 echo "[*] 正在获取本机 IP 归属地..."
