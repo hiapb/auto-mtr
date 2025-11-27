@@ -430,13 +430,15 @@ END{
 
   print "📈 稳定性评价"
   if (dest_loss >= 80){
-    print "- 由于末跳不响应 ICMP，无法准确评估抖动，仅可参考前几跳。"
+  print "- 由于末跳不响应 ICMP，无法准确评估抖动，仅可参考前几跳。"
   } else if (dest_stdev <= 2){
-    print "- 抖动很小，线路非常稳定。"
-  } else if (dest_stdev <= 8){
-    print "- 抖动中等，偶尔有波动。"
+  print "- 抖动极小，线路非常稳定。"
+  } else if (dest_stdev <= 5){
+  print "- 有轻微抖动，整体还算稳定。"
+  } else if (dest_stdev <= 10){
+  print "- 抖动比较明显，实时业务可能会有体感波动。"
   } else {
-    print "- 抖动较大，网络存在明显波动。"
+  print "- 抖动严重，网络波动非常明显。"
   }
   print ""
 
@@ -498,7 +500,7 @@ END{
   else if (rating=="不可用") base=15
 
   score = base
-  score -= dest_stdev * 2
+  score -= dest_stdev * 3
   score -= dest_loss * 1.5
   if (score < 0) score=0
   if (score > 100) score=100
