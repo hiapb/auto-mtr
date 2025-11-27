@@ -184,38 +184,65 @@ function region(c){
 function detect_carrier(host,    h){
   h = tolower(host)
 
-  # 日本相关
-  if (h ~ /ntt\.net|\.ntt\.com/)          return "NTT"
-  if (h ~ /kddi\.ne\.jp|kddi/)            return "KDDI"
-  if (h ~ /softbank|bbtec\.net/)         return "SoftBank"
-  if (h ~ /iij\.net/)                    return "IIJ"
+  # ==== 日本相关 ====
+  if (h ~ /ntt\.net|\.ntt\.com/)               return "NTT"
+  if (h ~ /kddi\.ne\.jp|\.kddi\.com|kddi/)     return "KDDI"
+  if (h ~ /softbank|bbtec\.net/)              return "SoftBank"
+  if (h ~ /iij\.net/)                         return "IIJ"
 
-  # 全球常见 Tier1 / 大骨干
-  if (h ~ /telia|se.telia.net/)          return "Telia"
-  if (h ~ /gtt\.net/)                    return "GTT"
-  if (h ~ /cogentco\.com|cogent/)        return "Cogent"
-  if (h ~ /he\.net|hurricane/)           return "Hurricane Electric"
-  if (h ~ /level3|lumen/)                return "Lumen/Level3"
-  if (h ~ /zayo/)                        return "Zayo"
-  if (h ~ /tatacommunications|tata/)     return "Tata"
-  if (h ~ /sparkle|seabone/)             return "Sparkle"
-  if (h ~ /comcast/)                     return "Comcast"
-  if (h ~ /verizon|alter\.net/)          return "Verizon"
+  # ==== 中国三大运营商 / 国际出口 ====
+  # China Telecom
+  if (h ~ /chinatelecom|chinanet|ctc|cn2|\.ctc\./)  return "China Telecom"
+  # China Unicom
+  if (h ~ /chinaunicom|cucc|cuc\.cn|unicom/)        return "China Unicom"
+  # China Mobile / CMI（你上面已经有 CMI，这里顺手并起来）
+  if (h ~ /chinamobile|cmcc|cmi\.chinamobile\.com|cmi\.hk|cmi\./) return "China Mobile/CMI"
 
-  # 亚洲区域骨干 / 运营商
-  if (h ~ /pccw|netvigator/)             return "PCCW"
-  if (h ~ /hgc\.com\.hk|hgc/)            return "HGC"
-  if (h ~ /cmi\.chinamobile\.com|cmi\.hk/)return "CMI"
-  if (h ~ /kt\.co\.kr|kornet/)           return "KT"
-  if (h ~ /skbroadband|sk broadband/)    return "SKB"
+  # ==== 香港 / 新加坡 / 区域运营商 ====
+  if (h ~ /pccw|netvigator/)                  return "PCCW"
+  if (h ~ /hgc\.com\.hk|hgc/)                 return "HGC"
+  if (h ~ /akari\-network|akari\.net|as38136/)return "Akari Networks"  # Akari
+  if (h ~ /jinx\.cloud|rfchost/)             return "JINX/RFCHOST"    # Jinx 这类商家
+  if (h ~ /singtel|asean\.ix|starhub/)       return "Singtel/SG Carrier"
+  if (h ~ /hkbn|bwbn|wizcloud/)              return "HKBN"
 
-  # 你线路里经常出现的
-  if (h ~ /gsl|globalsecurelayer/)       return "GSL"
-  if (h ~ /nube\.sh/)                    return "Nube"
-  if (h ~ /dmit\.com/)                   return "DMIT"
+  # ==== 韩国 ====
+  if (h ~ /kt\.co\.kr|kornet/)               return "KT"
+  if (h ~ /skbroadband|sk broadband/)        return "SK Broadband"
+
+  # ==== 澳洲 / 其他区域骨干 ====
+  if (h ~ /telstra|pacificnet/)              return "Telstra"
+  if (h ~ /retn\.net/)                       return "RETN"
+  if (h ~ /vodafone|cable-wireless|cw\.net/) return "Vodafone/C&W"
+
+  # ==== 全球常见 Tier1 / 大骨干 ====
+  if (h ~ /telia|se\.telia\.net|arelion/)    return "Telia/Arelion"
+  if (h ~ /gtt\.net/)                        return "GTT"
+  if (h ~ /cogentco\.com|\.cogent\./)        return "Cogent"
+  if (h ~ /he\.net|hurricane/)               return "Hurricane Electric"
+  if (h ~ /level3|l3net|centurylink|lumen/)  return "Lumen/Level3"
+  if (h ~ /zayo/)                            return "Zayo"
+  if (h ~ /tatacommunications|tata\.|seabone/)return "Tata/Sparkle"
+  if (h ~ /comcast/)                         return "Comcast"
+  if (h ~ /verizon|alter\.net/)              return "Verizon"
+  if (h ~ /orange|opentransit|oti/)          return "Orange"
+
+  # ==== CDN / 云厂商大网（有时也会当“骨干段”用） ====
+  if (h ~ /google|1e100\.net|googlenet/)     return "Google"
+  if (h ~ /amazonaws|aws/)                   return "AWS"
+  if (h ~ /cloudflare|warp|cf-ns/)           return "Cloudflare"
+  if (h ~ /facebook|fbcdn|tfbnw/)            return "Meta/Facebook"
+  if (h ~ /akamai|akam\.net/)               return "Akamai"
+  if (h ~ /edgecast|fastly/)                return "CDN (EdgeCast/Fastly)"
+
+  # ==== 你线路里经常出现的商家 ====
+  if (h ~ /gsl|globalsecurelayer/)          return "GSL"
+  if (h ~ /nube\.sh/)                       return "Nube"
+  if (h ~ /dmit\.com/)                      return "DMIT"
 
   return ""
 }
+
 
 BEGIN{
   hop=0
