@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
-#
-# auto-mtr-pro-v3.sh
+# hipb
 # 一键 mtr + 自动国家地区识别 + 跨境判断 + 骨干识别 + 评分
-# by ChatGPT & Mevu
+
 
 set -e
 
