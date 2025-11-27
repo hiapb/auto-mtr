@@ -50,7 +50,7 @@ read -rp "是否显示原始 MTR 报告？(y/N): " SHOW_RAW
 SHOW_RAW=${SHOW_RAW,,}   # 转小写
 
 # ---------- 利用 ipinfo.io 获取本机 & 目标归属地 ----------
-echo "[*] 正在获取本机 IP 归属地（ipinfo.io）..."
+echo "[*] 正在获取本机 IP 归属地..."
 SRC_INFO=$(curl -s ipinfo.io || true)
 
 SRC_IP=$(printf '%s\n' "$SRC_INFO" | awk -F'"' '/"ip":/ {print $4; exit}')
@@ -58,7 +58,7 @@ SRC_COUNTRY=$(printf '%s\n' "$SRC_INFO" | awk -F'"' '/"country":/ {print $4; exi
 SRC_CITY=$(printf '%s\n' "$SRC_INFO" | awk -F'"' '/"city":/ {print $4; exit}')
 SRC_ORG=$(printf '%s\n' "$SRC_INFO" | awk -F'"' '/"org":/ {print $4; exit}')
 
-echo "[*] 正在获取目标 IP 归属地（ipinfo.io）..."
+echo "[*] 正在获取目标 IP 归属地..."
 DST_INFO=$(curl -s "ipinfo.io/$TARGET" || true)
 
 DST_IP=$(printf '%s\n' "$DST_INFO" | awk -F'"' '/"ip":/ {print $4; exit}')
