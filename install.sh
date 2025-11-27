@@ -297,15 +297,15 @@ END{
   dR = region(dst)
 
   # --- ipinfo 归属地展示 ---
-  print "🗺 IP 归属地 (来自 ipinfo.io，无 token 可能有少量误差)"
+  print "🗺 IP 归属地"
   if (SRC_COUNTRY != "")
     printf("- 本机: %s %s [%s]\n", SRC_COUNTRY, SRC_CITY, SRC_ORG)
   else
-    print "- 本机: 未获取到 ipinfo 信息"
+    print "- 本机: 未获取到 IP 归属地"
   if (DST_COUNTRY != "")
     printf("- 目标: %s %s [%s]\n\n", DST_COUNTRY, DST_CITY, DST_ORG)
   else
-    print "- 目标: 未获取到 ipinfo 信息\n"
+    print "- 目标: 未获取到 IP 归属地\n"
 
   # --- 总体延迟 / 丢包 ---
   printf("📍 目标节点: %s\n", dest_host)
