@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # hipb
-# 一键 mtr + 自动国家地区识别 + 跨境判断 + 骨干识别 + 评分
+# 一键 mtr + 自动国家地区识别 + ipinfo 源/目标归属地 + 跨境判断 + 骨干识别 + 评分
 
 set -e
 
@@ -49,6 +49,23 @@ COUNT=${COUNT:-100}
 read -rp "是否显示原始 MTR 报告？(y/N): " SHOW_RAW
 SHOW_RAW=${SHOW_RAW,,}   # 转小写
 
+# ---------- 利用 ipinfo.io 获取本机 & 目标归属地 ----------
+echo "[*] 正在获取本机 IP 归属地（ipinfo.io）..."
+SRC_INFO=$(curl -s ipinfo.io || true)
+
+SRC_IP=$(printf '%s\n' "$SRC_INFO" | awk -F'"' '/"ip":/ {print $4; exit}')
+SRC_COUNTRY=$(printf '%s\n' "$SRC_INFO" | awk -F'"' '/"country":/ {print $4; exit}')
+SRC_CITY=$(printf '%s\n' "$SRC_INFO" | awk -F'"' '/"city":/ {print $4; exit}')
+SRC_ORG=$(printf '%s\n' "$SRC_INFO" | awk -F'"' '/"org":/ {print $4; exit}')
+
+echo "[*] 正在获取目标 IP 归属地（ipinfo.io）..."
+DST_INFO=$(curl -s "ipinfo.io/$TARGET" || true)
+
+DST_IP=$(printf '%s\n' "$DST_INFO" | awk -F'"' '/"ip":/ {print $4; exit}')
+DST_COUNTRY=$(printf '%s\n' "$DST_INFO" | awk -F'"' '/"country":/ {print $4; exit}')
+DST_CITY=$(printf '%s\n' "$DST_INFO" | awk -F'"' '/"city":/ {print $4; exit}')
+DST_ORG=$(printf '%s\n' "$DST_INFO" | awk -F'"' '/"org":/ {print $4; exit}')
+
 REPORT="/tmp/mtr_report_${TARGET//[^a-zA-Z0-9_.-]/_}.txt"
 
 echo "[*] 正在测试：$TARGET"
@@ -85,95 +102,47 @@ fi
 
 echo "================ 自动分析报告 ================"
 
-awk '
-# -------- 国家识别 --------
+awk -v SRC_COUNTRY="$SRC_COUNTRY" \
+    -v SRC_CITY="$SRC_CITY" \
+    -v SRC_ORG="$SRC_ORG" \
+    -v DST_COUNTRY="$DST_COUNTRY" \
+    -v DST_CITY="$DST_CITY" \
+    -v DST_ORG="$DST_ORG" '
+# -------- 国家识别（用于每跳，大致判断区域用） --------
 
 function detect_country(host,    h) {
   h=tolower(host)
 
-  # ====== 香港 HK ======
-  if (h~/hongkong|hong-kong|hkg[0-9]*|\.hkix\.net|\.hkix\.*/) return "HK"
+  # 香港 HK
+  if (h~/hongkong|hong-kong|hkg[0-9]*|\.hkix\.net|\.hkix\./) return "HK"
+  if (h~/pccw|netvigator|hgc\.com\.hk|i-cable|icable|hkt\.com|hkbnes/) return "HK"
   if (h~/\.hk$/ || h~/\.hk\./) return "HK"
-  if (h~/pccw|netvigator|hgc\.com\.hk|i-cable|icable/) return "HK"
-  if (h~/hkt\.com|hkbnes/) return "HK"
 
-  # ====== 台湾 TW ======
-  if (h~/\.tw$/ || h~/\.tw\./) return "TW"
+  # 台湾 TW
   if (h~/hinet\.net|seed\.net\.tw|cht\.com\.tw|emome\.net|tfbnw\.net|tfn\.net\.tw/) return "TW"
   if (h~/dynamic-ip\.pni\.tw|\.pni\.tw/) return "TW"
+  if (h~/\.tw$/ || h~/\.tw\./) return "TW"
 
-  # ====== 中国大陆 CN ======
+  # 中国大陆 CN
   if (h~/beijing|bj-|pek/) return "CN"
   if (h~/shanghai|sh-|sha/) return "CN"
   if (h~/guangzhou|gz-/) return "CN"
   if (h~/shenzhen|sz-/) return "CN"
   if (h~/\.cn$/ || h~/\.cn\./) return "CN"
 
-  # ====== 日本 JP ======
+  # 日本 JP
   if (h~/tokyo|tyo|osaka|kix|nagoya/) return "JP"
   if (h~/\.jp$/ || h~/\.jp\./) return "JP"
 
-  # ====== 韩国 KR ======
+  # 韩国 KR
   if (h~/seoul|icn|busan/) return "KR"
   if (h~/\.kr$/ || h~/\.kr\./) return "KR"
 
-  # ====== 东南亚 ======
+  # 新加坡 SG
   if (h~/singapore|sin[0-9]*|sgp/) return "SG"
   if (h~/\.sg$/ || h~/\.sg\./) return "SG"
-  if (h~/kuala ?lumpur|kul/) return "MY"
-  if (h~/\.my$/ || h~/\.my\./) return "MY"
-  if (h~/bangkok|bkk/) return "TH"
-  if (h~/\.th$/ || h~/\.th\./) return "TH"
-  if (h~/manila|mnl/) return "PH"
-  if (h~/\.ph$/ || h~/\.ph\./) return "PH"
-  if (h~/jakarta|jkt/) return "ID"
-  if (h~/\.id$/ || h~/\.id\./) return "ID"
-  if (h~/hanoi|saigon|hochiminh/) return "VN"
-  if (h~/\.vn$/ || h~/\.vn\./) return "VN"
 
-  # ====== 南亚 ======
-  if (h~/mumbai|delhi|bangalore|blr|chennai/) return "IN"
-  if (h~/\.in$/ || h~/\.in\./) return "IN"
-
-  # ====== 欧洲常见 ======
-  if (h~/frankfurt|fra[0-9]*/) return "DE"
-  if (h~/munich|muc/) return "DE"
-  if (h~/\.de$/ || h~/\.de\./) return "DE"
-
-  if (h~/london|lon[0-9]*/) return "GB"
-  if (h~/\.uk$/ || h~/\.co\.uk/) return "GB"
-
-  if (h~/paris|cdg/) return "FR"
-  if (h~/\.fr$/ || h~/\.fr\./) return "FR"
-
-  if (h~/amsterdam|ams[0-9]*/) return "NL"
-  if (h~/\.nl$/ || h~/\.nl\./) return "NL"
-
-  if (h~/madrid|mad/) return "ES"
-  if (h~/\.es$/ || h~/\.es\./) return "ES"
-
-  if (h~/rome|milano|mxp|fco/) return "IT"
-  if (h~/\.it$/ || h~/\.it\./) return "IT"
-
-  if (h~/stockholm|arn/) return "SE"
-  if (h~/\.se$/ || h~/\.se\./) return "SE"
-
-  if (h~/oslo/) return "NO"
-  if (h~/\.no$/ || h~/\.no\./) return "NO"
-
-  if (h~/vienna|vie/) return "AT"
-  if (h~/\.at$/ || h~/\.at\./) return "AT"
-
-  if (h~/zurich|zrh|geneva/) return "CH"
-  if (h~/\.ch$/ || h~/\.ch\./) return "CH"
-
-  if (h~/prague/) return "CZ"
-  if (h~/\.cz$/ || h~/\.cz\./) return "CZ"
-
-  if (h~/warsaw|waw/) return "PL"
-  if (h~/\.pl$/ || h~/\.pl\./) return "PL"
-
-  # ====== 北美 ======
+  # 美国 US / 加拿大 CA / 欧洲若干
   if (h~/newyork|nyc|ny-*/) return "US"
   if (h~/losangeles|lax|sanjose|sjc|seattle|sea|chicago|chi|dallas|dfw|atlanta|atl|miami|mia/) return "US"
   if (h~/\.us$/ || h~/\.us\./) return "US"
@@ -181,19 +150,17 @@ function detect_country(host,    h) {
   if (h~/toronto|yyz|montreal|yul|vancouver|yvr/) return "CA"
   if (h~/\.ca$/ || h~/\.ca\./) return "CA"
 
-  # ====== 中东 ======
-  if (h~/dubai|dxb/) return "AE"
-  if (h~/\.ae$/ || h~/\.ae\./) return "AE"
-  if (h~/riyadh/) return "SA"
-  if (h~/\.sa$/ || h~/\.sa\./) return "SA"
-  if (h~/doha/) return "QA"
-  if (h~/\.qa$/ || h~/\.qa\./) return "QA"
-  if (h~/istanbul/) return "TR"
-  if (h~/\.tr$/ || h~/\.tr\./) return "TR"
+  if (h~/frankfurt|fra[0-9]*/) return "DE"
+  if (h~/\.de$/ || h~/\.de\./) return "DE"
+  if (h~/london|lon[0-9]*/) return "GB"
+  if (h~/\.uk$/ || h~/\.co\.uk/) return "GB"
+  if (h~/amsterdam|ams[0-9]*/) return "NL"
+  if (h~/\.nl$/ || h~/\.nl\./) return "NL"
+  if (h~/paris|cdg/) return "FR"
+  if (h~/\.fr$/ || h~/\.fr\./) return "FR"
 
-  # ====== 大洋洲 / 非洲 ======
+  # 其他一些
   if (h~/sydney|melbourne|brisbane|\.au/) return "AU"
-  if (h~/auckland|\.nz/) return "NZ"
   if (h~/johannesburg|cpt|\.za/) return "ZA"
 
   return "UN"
@@ -202,30 +169,51 @@ function detect_country(host,    h) {
 # -------- 区域 --------
 function region(c){
   if (c ~ /HK|TW|CN|JP|KR/) return "EAS"
-  if (c ~ /SG|MY|TH|PH|ID|VN/) return "SEAS"
-  if (c == "IN") return "SAS"
-  if (c ~ /DE|GB|FR|NL|ES|IT|SE|NO|AT|CZ|CH|PL/) return "EU"
-  if (c ~ /US|CA/) return "NA"
-  if (c ~ /AE|SA|QA|TR/) return "ME"
-  if (c ~ /AU|NZ/) return "OC"
-  if (c == "ZA") return "AF"
+  if (c ~ /SG|MY|TH|PH|ID|VN|LA|KH|MM|BN|TL/) return "SEAS"
+  if (c ~ /IN|PK|BD|LK|NP|BT|MV/) return "SAS"
+  if (c ~ /DE|GB|FR|NL|ES|IT|SE|NO|AT|CZ|CH|PL|BE|LU|IE|FI|DK|PT|GR|RO|HU|BG|HR|SK|SI|EE|LV|LT|IS|MT|CY|UA|BY|RU/) return "EU"
+  if (c ~ /US|CA|MX/) return "NA"
+  if (c ~ /BR|AR|CL|PE|CO|VE|UY|PY|BO|EC|GY|SR|GF|FK/) return "SA"
+  if (c ~ /AE|SA|QA|TR|IL|KW|BH|OM|JO|LB|IR|IQ|SY|YE/) return "ME"
+  if (c ~ /ZA|EG|NG|KE|TZ|GH|MA|DZ|TN|ET|UG|CM|CI|SN|SD|LY|ZW|ZM|NA|BW|MW|MZ|AO|CD|GA/) return "AF"
+  if (c ~ /AU|NZ|FJ|PG|SB|VU|NC|PF|WS|TO|KI|TV|NR/) return "OC"
   return "OT"
 }
 
-# -------- 骨干 --------
-function detect_carrier(host,h){
-  h=tolower(host)
-  if(h~/ntt/)return"NTT"
-  if(h~/gtt/)return"GTT"
-  if(h~/telia/)return"Telia"
-  if(h~/cogent/)return"Cogent"
-  if(h~/he\.net/)return"HE"
-  if(h~/lumen|level3/)return"Lumen"
-  if(h~/pccw/)return"PCCW"
-  if(h~/hgc/)return"HGC"
-  if(h~/gsl|globalsecurelayer/)return"GSL"
-  if(h~/nube/)return"Nube"
-  if(h~/dmit/)return"DMIT"
+# -------- 骨干识别（扩展版） --------
+function detect_carrier(host,    h){
+  h = tolower(host)
+
+  # 日本相关
+  if (h ~ /ntt\.net|\.ntt\.com/)          return "NTT"
+  if (h ~ /kddi\.ne\.jp|kddi/)            return "KDDI"
+  if (h ~ /softbank|bbtec\.net/)         return "SoftBank"
+  if (h ~ /iij\.net/)                    return "IIJ"
+
+  # 全球常见 Tier1 / 大骨干
+  if (h ~ /telia|se.telia.net/)          return "Telia"
+  if (h ~ /gtt\.net/)                    return "GTT"
+  if (h ~ /cogentco\.com|cogent/)        return "Cogent"
+  if (h ~ /he\.net|hurricane/)           return "Hurricane Electric"
+  if (h ~ /level3|lumen/)                return "Lumen/Level3"
+  if (h ~ /zayo/)                        return "Zayo"
+  if (h ~ /tatacommunications|tata/)     return "Tata"
+  if (h ~ /sparkle|seabone/)             return "Sparkle"
+  if (h ~ /comcast/)                     return "Comcast"
+  if (h ~ /verizon|alter\.net/)          return "Verizon"
+
+  # 亚洲区域骨干 / 运营商
+  if (h ~ /pccw|netvigator/)             return "PCCW"
+  if (h ~ /hgc\.com\.hk|hgc/)            return "HGC"
+  if (h ~ /cmi\.chinamobile\.com|cmi\.hk/)return "CMI"
+  if (h ~ /kt\.co\.kr|kornet/)           return "KT"
+  if (h ~ /skbroadband|sk broadband/)    return "SKB"
+
+  # 你线路里经常出现的
+  if (h ~ /gsl|globalsecurelayer/)       return "GSL"
+  if (h ~ /nube\.sh/)                    return "Nube"
+  if (h ~ /dmit\.com/)                   return "DMIT"
+
   return ""
 }
 
@@ -270,43 +258,56 @@ BEGIN{
 }
 
 END{
-  # -------- 源国家：前 3 跳多数投票 --------
-  src="UN"
+  # --- 先用 hop 粗略推 src/dst（作为 ipinfo 失败时的 fallback） ---
+  src_hop="UN"
   maxCnt=0
   for(i=1;i<=hop && i<=3;i++){
     c=h_country[i]
     if(c!="UN"){
       srcCount[c]++
-      if(srcCount[c]>maxCnt){maxCnt=srcCount[c];src=c}
+      if(srcCount[c]>maxCnt){maxCnt=srcCount[c];src_hop=c}
     }
   }
-  # 如果前 3 跳都 UN，再退回到“从前往后第一个非 UN”
-  if(src=="UN"){
+  if(src_hop=="UN"){
     for(i=1;i<=hop;i++){
-      if(h_country[i]!="UN"){src=h_country[i];break}
+      if(h_country[i]!="UN"){src_hop=h_country[i];break}
     }
   }
 
-  # -------- 目标国家：后 3 跳多数投票 --------
-  dst="UN"
+  dst_hop="UN"
   maxCnt=0
   for(i=hop;i>=1 && i>=hop-2;i--){
     c=h_country[i]
     if(c!="UN"){
       dstCount[c]++
-      if(dstCount[c]>maxCnt){maxCnt=dstCount[c];dst=c}
+      if(dstCount[c]>maxCnt){maxCnt=dstCount[c];dst_hop=c}
     }
   }
-  # 如果后 3 跳都 UN，再退回到“从后往前第一个非 UN”
-  if(dst=="UN"){
+  if(dst_hop=="UN"){
     for(i=hop;i>=1;i--){
-      if(h_country[i]!="UN"){dst=h_country[i];break}
+      if(h_country[i]!="UN"){dst_hop=h_country[i];break}
     }
   }
 
-  sR=region(src)
-  dR=region(dst)
+  # --- 真正用于区域判断 / 评分的 src/dst：优先用 ipinfo ---
+  src = (SRC_COUNTRY != "" ? SRC_COUNTRY : src_hop)
+  dst = (DST_COUNTRY != "" ? DST_COUNTRY : dst_hop)
 
+  sR = region(src)
+  dR = region(dst)
+
+  # --- ipinfo 归属地展示 ---
+  print "🗺 IP 归属地 (来自 ipinfo.io，无 token 可能有少量误差)"
+  if (SRC_COUNTRY != "")
+    printf("- 本机: %s %s [%s]\n", SRC_COUNTRY, SRC_CITY, SRC_ORG)
+  else
+    print "- 本机: 未获取到 ipinfo 信息"
+  if (DST_COUNTRY != "")
+    printf("- 目标: %s %s [%s]\n\n", DST_COUNTRY, DST_CITY, DST_ORG)
+  else
+    print "- 目标: 未获取到 ipinfo 信息\n"
+
+  # --- 总体延迟 / 丢包 ---
   printf("📍 目标节点: %s\n", dest_host)
   printf("📡 丢包率  : %.1f%%\n", dest_loss)
   printf("⏱ 延迟统计: Avg=%.1f ms, Best=%.1f ms, Worst=%.1f ms, 抖动=%.2f ms\n\n",
@@ -383,7 +384,7 @@ END{
   if(!found) print "- 未从主机名中识别出明显骨干（可能隐藏或自建网）。"
   print ""
 
-  # ------- 评分（已修复） -------
+  # ------- 评分 -------
   base=60
   if(rate=="极佳") base=95
   else if(rate=="优秀") base=90
