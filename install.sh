@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # hipb
-# 一键 MTR + 国家地区识别 + ipinfo 源/目标归属地 + 骨干识别 (T1/T2/T3) + 禁 ICMP / 不可达识别 + 评分
+# 一键 MTR + 国家地区识别 + ipinfo 源/目标归属地 + 骨干识别 (T1/T2/T3) + 禁 ICMP / 不可达识别 + 区域预判评分
 
 set -e
 
@@ -175,7 +175,7 @@ function region(c){
 }
 
 # -------- 骨干识别（T1/T2/T3） --------
-# 返回: "T1|NTT" / "T2|China Telecom" / "T3|GSL"
+# 返回: "T1|NTT" / "T2|China Telecom (CTC)" / "T3|GSL"
 function detect_backbone(host,    h){
   h = tolower(host)
 
@@ -193,9 +193,10 @@ function detect_backbone(host,    h){
   if (h ~ /comcast/)                           return "T1|Comcast"
 
   # Tier2：区域骨干 + 三大 + 大云/CDN
-  if (h ~ /chinatelecom|chinanet|ctc|cn2|\.ctc\./)                 return "T2|China Telecom"
-  if (h ~ /chinaunicom|cucc|cuc\.cn|unicom/)                       return "T2|China Unicom"
-  if (h ~ /chinamobile|cmcc|cmi\.chinamobile\.com|cmi\.hk|cmi\./)  return "T2|China Mobile/CMI"
+  # China Telecom Global / CN2：只认 CTC/CN2，不乱匹配 chinanet/chinatelecom
+  if (h ~ /ctc-g|ctc\.net|cn2|\.ctc\./)                          return "T2|China Telecom (CTC)"
+  if (h ~ /chinaunicom|cucc|cuc\.cn|unicom/)                     return "T2|China Unicom"
+  if (h ~ /chinamobile|cmcc|cmi\.chinamobile\.com|cmi\.hk|cmi\./)return "T2|China Mobile/CMI"
   if (h ~ /pccw|netvigator/)                  return "T2|PCCW"
   if (h ~ /hgc\.com\.hk|hgc/)                 return "T2|HGC"
   if (h ~ /hkbn|bwbn|wizcloud/)              return "T2|HKBN"
@@ -242,6 +243,7 @@ BEGIN{
   h_loss[hop]=loss+0
   h_avg[hop]=avg+0
   h_stdev[hop]=stdev+0
+  h_country[hop]=detect_country(host)
 
   if (loss+0 < 100) alive_hops++
 
@@ -274,6 +276,41 @@ BEGIN{
 }
 
 END{
+  # ---- 基于 hop 粗略推断 src/dst 国家（ipinfo 失败时用） ----
+  src_hop="UN"; dst_hop="UN"
+  maxCnt=0
+  for(i=1;i<=hop && i<=3;i++){
+    c=h_country[i]
+    if(c!="UN"){
+      srcCount[c]++
+      if(srcCount[c]>maxCnt){maxCnt=srcCount[c]; src_hop=c}
+    }
+  }
+  if(src_hop=="UN"){
+    for(i=1;i<=hop;i++){
+      if(h_country[i]!="UN"){src_hop=h_country[i];break}
+    }
+  }
+
+  maxCnt=0
+  for(i=hop;i>=1 && i>=hop-2;i--){
+    c=h_country[i]
+    if(c!="UN"){
+      dstCount[c]++
+      if(dstCount[c]>maxCnt){maxCnt=dstCount[c]; dst_hop=c}
+    }
+  }
+  if(dst_hop=="UN"){
+    for(i=hop;i>=1;i--){
+      if(h_country[i]!="UN"){dst_hop=h_country[i];break}
+    }
+  }
+
+  src = (SRC_COUNTRY != "" ? SRC_COUNTRY : src_hop)
+  dst = (DST_COUNTRY != "" ? DST_COUNTRY : dst_hop)
+  sR  = region(src)
+  dR  = region(dst)
+
   # ---------------- 完全不可达：所有跳都是 100% 丢包 ----------------
   if (alive_hops == 0 || hop == 0){
     print "🗺 IP 归属地"
@@ -317,9 +354,14 @@ END{
     print "- 本机: 未获取到 IP 归属地"
 
   if (DST_COUNTRY != "")
-    printf("- 目标: %s %s [%s]\n\n", DST_COUNTRY,DST_CITY,DST_ORG)
+    printf("- 目标: %s %s [%s]\n", DST_COUNTRY,DST_CITY,DST_ORG)
   else
-    print "- 目标: 未获取到 IP 归属地\n"
+    print "- 目标: 未获取到 IP 归属地"
+  print ""
+
+  print "🌍 区域判断"
+  print "- 源端国家: " src " (" sR ")"
+  print "- 目标国家: " dst " (" dR ")\n"
 
   # ---------------- 修正目标节点名称：避免 ??? ----------------
   real_dest = dest_host
@@ -337,7 +379,7 @@ END{
   printf("📡 丢包率  : %.1f%%\n", dest_loss)
   printf("⏱ 延迟统计: Avg=%.1f ms, 抖动=%.2f ms\n\n", dest_avg, dest_stdev)
 
-  # ---------------- 延迟 & 稳定性 & 丢包 评价 ----------------
+  # ---------------- 延迟 & 稳定性 & 丢包 评价（区域预判） ----------------
   print "⚙ 延迟评价"
   rating = ""
   explain = ""
@@ -346,10 +388,40 @@ END{
     rating  = "不可用"
     explain = "末跳几乎不响应 ICMP，目标可能禁 ping 或丢弃 ICMP，只能参考前几跳质量。"
   } else {
-    if (dest_avg <= 10)      { rating="极佳"; explain="延迟极低，适合延迟敏感业务。"}
-    else if (dest_avg <=30 ) { rating="优秀"; explain="延迟较低，体验良好。"}
-    else if (dest_avg <=80 ) { rating="一般"; explain="延迟中等，多数业务可接受。"}
-    else                     { rating="较差"; explain="延迟较高，实时性业务体验会较差。"}
+    avg = dest_avg
+
+    # 同国 / 同区域内本地：要求更严格
+    if (src == dst && src != "UN"){
+      if (avg <= 5)       { rating="极佳"; explain="同国本地延迟极低，接近同城/机房级别。"}
+      else if (avg <=10 ) { rating="优秀"; explain="同国延迟较低，绝大多数业务体验优秀。"}
+      else if (avg <=20 ) { rating="一般"; explain="同国延迟中等，可能存在绕路或调度。"}
+      else                { rating="较差"; explain="同国延迟明显偏高，疑似绕路或网络质量较差。"}
+    }
+    # 港 ↔ 新 特殊预判
+    else if ( (src=="HK" && dst=="SG") || (src=="SG" && dst=="HK") ){
+      if (avg <=28)       { rating="极佳"; explain="港↔新 顶级直连水平，多数情况下为高质量专线/优质骨干。"}
+      else if (avg <=32 ) { rating="优秀"; explain="港↔新 正常优秀水平，线路健康。"}
+      else if (avg <=40 ) { rating="一般"; explain="港↔新 延迟略高，可能存在轻微绕路或链路中转。"}
+      else                { rating="较差"; explain="港↔新 延迟明显偏高，较大概率绕路其他区域。"}
+    }
+    # 东亚 ↔ 东南亚（如 CN/JP/KR/TW ↔ SG/MY/TH/...）
+    else if ( (sR=="EAS" && dR=="SEAS") || (sR=="SEAS" && dR=="EAS") ){
+      if (avg <=40)       { rating="优秀"; explain="东亚↔东南亚 延迟较低，跨境质量优秀。"}
+      else if (avg <=60 ) { rating="一般"; explain="东亚↔东南亚 延迟中等，属于公网常见水平。"}
+      else                { rating="较差"; explain="东亚↔东南亚 延迟偏高，存在较明显绕路或弱线路。"}
+    }
+    # 亚洲 ↔ 北美
+    else if ( (sR~/EAS|SEAS|SAS/ && dR=="NA") || (dR~/EAS|SEAS|SAS/ && sR=="NA") ){
+      if (avg <=160)      { rating="优秀"; explain="亚↔北美 延迟处于高质量跨太平洋直连水平。"}
+      else if (avg <=220) { rating="一般"; explain="亚↔北美 延迟为公网常见水平。"}
+      else                { rating="较差"; explain="亚↔北美 延迟偏高，疑似绕路欧非或多次中转。"}
+    }
+    # 其他跨洲通用规则
+    else {
+      if (avg <=70)       { rating="优秀"; explain="整体 RTT 不高，多数跨境业务体验较好。"}
+      else if (avg <=120) { rating="一般"; explain="延迟中等，适合非极端延迟敏感的业务。"}
+      else                { rating="较差"; explain="延迟较高，仅适合作为备线或非实时业务。"}
+    }
   }
 
   print "- 综合延迟评价: " rating
@@ -419,10 +491,10 @@ END{
 
   # ---------------- 评分 ----------------
   base=60
-  if (rating=="极佳") base=95
+  if (rating=="极佳")   base=95
   else if (rating=="优秀") base=85
-  else if (rating=="一般") base=65
-  else if (rating=="较差") base=45
+  else if (rating=="一般") base=70
+  else if (rating=="较差") base=50
   else if (rating=="不可用") base=15
 
   score = base
@@ -432,7 +504,7 @@ END{
   if (score > 100) score=100
 
   printf("⭐ 综合线路评分：%.0f / 100\n", score)
-  print "（说明：评分基于末跳延迟/抖动/丢包的简单模型，仅供参考，真实体验请结合业务实际情况。）"
+  print "（说明：评分基于区域预判 + 末跳延迟 / 抖动 / 丢包的简单模型，仅供参考。）"
 }
 ' "$REPORT"
 
