@@ -91,54 +91,109 @@ awk '
 function detect_country(host,    h) {
   h=tolower(host)
 
-  # 东亚
-  if (h~/hongkong|hkg|\.hk/) return "HK"
-  if (h~/taipei|tpe|\.tw/) return "TW"
-  if (h~/beijing|bj-|shanghai|sh-|guangzhou|gz-|shenzhen|sz-|\.cn/) return "CN"
-  if (h~/tokyo|osaka|kix|tyo|\.jp/) return "JP"
-  if (h~/seoul|icn|busan|\.kr/) return "KR"
+  # ====== 香港 HK ======
+  if (h~/hongkong|hong-kong|hkg[0-9]*|\.hkix\.net|\.hkix\.*/) return "HK"
+  if (h~/\.hk$/ || h~/\.hk\./) return "HK"
+  if (h~/pccw|netvigator|hgc\.com\.hk|i-cable|icable/) return "HK"
+  if (h~/hkt\.com|hkbnes/) return "HK"
 
-  # 东南亚
-  if (h~/singapore|sin|\.sg/) return "SG"
-  if (h~/kuala|kul|\.my/) return "MY"
-  if (h~/bangkok|bkk|\.th/) return "TH"
-  if (h~/manila|mnl|\.ph/) return "PH"
-  if (h~/jakarta|jkt|\.id/) return "ID"
-  if (h~/hanoi|saigon|hochiminh|\.vn/) return "VN"
+  # ====== 台湾 TW ======
+  if (h~/\.tw$/ || h~/\.tw\./) return "TW"
+  if (h~/hinet\.net|seed\.net\.tw|cht\.com\.tw|emome\.net|tfbnw\.net|tfn\.net\.tw/) return "TW"
+  if (h~/dynamic-ip\.pni\.tw|\.pni\.tw/) return "TW"
 
-  # 南亚
-  if (h~/mumbai|delhi|bangalore|blr|\.in/) return "IN"
+  # ====== 中国大陆 CN ======
+  if (h~/beijing|bj-|pek/) return "CN"
+  if (h~/shanghai|sh-|sha/) return "CN"
+  if (h~/guangzhou|gz-/) return "CN"
+  if (h~/shenzhen|sz-/) return "CN"
+  if (h~/\.cn$/ || h~/\.cn\./) return "CN"
 
-  # 欧洲
-  if (h~/frankfurt|fra|\.de/) return "DE"
-  if (h~/london|lon|\.uk|\.co\.uk/) return "GB"
-  if (h~/paris|cdg|\.fr/) return "FR"
-  if (h~/amsterdam|ams|\.nl/) return "NL"
-  if (h~/madrid|mad|\.es/) return "ES"
-  if (h~/rome|milano|mxp|fco|\.it/) return "IT"
-  if (h~/stockholm|arn|\.se/) return "SE"
-  if (h~/oslo|\.no/) return "NO"
-  if (h~/vienna|vie|\.at/) return "AT"
-  if (h~/zurich|zrh|\.ch/) return "CH"
-  if (h~/prague|\.cz/) return "CZ"
-  if (h~/poland|waw|\.pl/) return "PL"
+  # ====== 日本 JP ======
+  if (h~/tokyo|tyo|osaka|kix|nagoya/) return "JP"
+  if (h~/\.jp$/ || h~/\.jp\./) return "JP"
 
-  # 北美
-  if (h~/newyork|nyc|ny-|\.us/) return "US"
-  if (h~/losangeles|lax|sanjose|sjc|seattle|sea|chicago|chi|dallas|dfw|atlanta|atl/) return "US"
-  if (h~/toronto|montreal|vancouver|\.ca/) return "CA"
+  # ====== 韩国 KR ======
+  if (h~/seoul|icn|busan/) return "KR"
+  if (h~/\.kr$/ || h~/\.kr\./) return "KR"
 
-  # 中东
-  if (h~/dubai|dxb|\.ae/) return "AE"
-  if (h~/riyadh|\.sa/) return "SA"
-  if (h~/doha|\.qa/) return "QA"
-  if (h~/istanbul|\.tr/) return "TR"
+  # ====== 东南亚 ======
+  if (h~/singapore|sin[0-9]*|sgp/) return "SG"
+  if (h~/\.sg$/ || h~/\.sg\./) return "SG"
+  if (h~/kuala ?lumpur|kul/) return "MY"
+  if (h~/\.my$/ || h~/\.my\./) return "MY"
+  if (h~/bangkok|bkk/) return "TH"
+  if (h~/\.th$/ || h~/\.th\./) return "TH"
+  if (h~/manila|mnl/) return "PH"
+  if (h~/\.ph$/ || h~/\.ph\./) return "PH"
+  if (h~/jakarta|jkt/) return "ID"
+  if (h~/\.id$/ || h~/\.id\./) return "ID"
+  if (h~/hanoi|saigon|hochiminh/) return "VN"
+  if (h~/\.vn$/ || h~/\.vn\./) return "VN"
 
-  # 大洋洲
+  # ====== 南亚 ======
+  if (h~/mumbai|delhi|bangalore|blr|chennai/) return "IN"
+  if (h~/\.in$/ || h~/\.in\./) return "IN"
+
+  # ====== 欧洲常见 ======
+  if (h~/frankfurt|fra[0-9]*/) return "DE"
+  if (h~/munich|muc/) return "DE"
+  if (h~/\.de$/ || h~/\.de\./) return "DE"
+
+  if (h~/london|lon[0-9]*/) return "GB"
+  if (h~/\.uk$/ || h~/\.co\.uk/) return "GB"
+
+  if (h~/paris|cdg/) return "FR"
+  if (h~/\.fr$/ || h~/\.fr\./) return "FR"
+
+  if (h~/amsterdam|ams[0-9]*/) return "NL"
+  if (h~/\.nl$/ || h~/\.nl\./) return "NL"
+
+  if (h~/madrid|mad/) return "ES"
+  if (h~/\.es$/ || h~/\.es\./) return "ES"
+
+  if (h~/rome|milano|mxp|fco/) return "IT"
+  if (h~/\.it$/ || h~/\.it\./) return "IT"
+
+  if (h~/stockholm|arn/) return "SE"
+  if (h~/\.se$/ || h~/\.se\./) return "SE"
+
+  if (h~/oslo/) return "NO"
+  if (h~/\.no$/ || h~/\.no\./) return "NO"
+
+  if (h~/vienna|vie/) return "AT"
+  if (h~/\.at$/ || h~/\.at\./) return "AT"
+
+  if (h~/zurich|zrh|geneva/) return "CH"
+  if (h~/\.ch$/ || h~/\.ch\./) return "CH"
+
+  if (h~/prague/) return "CZ"
+  if (h~/\.cz$/ || h~/\.cz\./) return "CZ"
+
+  if (h~/warsaw|waw/) return "PL"
+  if (h~/\.pl$/ || h~/\.pl\./) return "PL"
+
+  # ====== 北美 ======
+  if (h~/newyork|nyc|ny-*/) return "US"
+  if (h~/losangeles|lax|sanjose|sjc|seattle|sea|chicago|chi|dallas|dfw|atlanta|atl|miami|mia/) return "US"
+  if (h~/\.us$/ || h~/\.us\./) return "US"
+
+  if (h~/toronto|yyz|montreal|yul|vancouver|yvr/) return "CA"
+  if (h~/\.ca$/ || h~/\.ca\./) return "CA"
+
+  # ====== 中东 ======
+  if (h~/dubai|dxb/) return "AE"
+  if (h~/\.ae$/ || h~/\.ae\./) return "AE"
+  if (h~/riyadh/) return "SA"
+  if (h~/\.sa$/ || h~/\.sa\./) return "SA"
+  if (h~/doha/) return "QA"
+  if (h~/\.qa$/ || h~/\.qa\./) return "QA"
+  if (h~/istanbul/) return "TR"
+  if (h~/\.tr$/ || h~/\.tr\./) return "TR"
+
+  # ====== 大洋洲 / 非洲 ======
   if (h~/sydney|melbourne|brisbane|\.au/) return "AU"
   if (h~/auckland|\.nz/) return "NZ"
-
-  # 非洲
   if (h~/johannesburg|cpt|\.za/) return "ZA"
 
   return "UN"
@@ -215,15 +270,38 @@ BEGIN{
 }
 
 END{
-  # 源国家
+  # -------- 源国家：前 3 跳多数投票 --------
   src="UN"
-  for(i=1;i<=hop;i++){
-    if(h_country[i]!="UN"){src=h_country[i];break}
+  maxCnt=0
+  for(i=1;i<=hop && i<=3;i++){
+    c=h_country[i]
+    if(c!="UN"){
+      srcCount[c]++
+      if(srcCount[c]>maxCnt){maxCnt=srcCount[c];src=c}
+    }
   }
-  # 目标国家
+  # 如果前 3 跳都 UN，再退回到“从前往后第一个非 UN”
+  if(src=="UN"){
+    for(i=1;i<=hop;i++){
+      if(h_country[i]!="UN"){src=h_country[i];break}
+    }
+  }
+
+  # -------- 目标国家：后 3 跳多数投票 --------
   dst="UN"
-  for(i=hop;i>=1;i--){
-    if(h_country[i]!="UN"){dst=h_country[i];break}
+  maxCnt=0
+  for(i=hop;i>=1 && i>=hop-2;i--){
+    c=h_country[i]
+    if(c!="UN"){
+      dstCount[c]++
+      if(dstCount[c]>maxCnt){maxCnt=dstCount[c];dst=c}
+    }
+  }
+  # 如果后 3 跳都 UN，再退回到“从后往前第一个非 UN”
+  if(dst=="UN"){
+    for(i=hop;i>=1;i--){
+      if(h_country[i]!="UN"){dst=h_country[i];break}
+    }
   }
 
   sR=region(src)
@@ -243,7 +321,7 @@ END{
   print "⚙ 延迟评价"
   avg=dest_avg
 
-  if(src==dst){
+  if(src==dst && src!="UN"){
     if(avg<=2){rate="极佳";comm="同机房 / 同城极限延迟。"}
     else if(avg<=5){rate="优秀";comm="本地骨干质量优秀，适合延迟敏感业务。"}
     else if(avg<=10){rate="良好";comm="本地延迟正常，多数业务可用。"}
