@@ -236,12 +236,17 @@ BEGIN{
   hop++
   host=$3
   loss=$(NF-6); gsub(/%/,"",loss)
+  last=$(NF-4)
   avg=$(NF-3)
+  best=$(NF-2)
+  wrst=$(NF-1)
   stdev=$NF
 
   h_host[hop]=host
   h_loss[hop]=loss+0
   h_avg[hop]=avg+0
+  h_best[hop]=best+0
+  h_wrst[hop]=wrst+0
   h_stdev[hop]=stdev+0
   h_country[hop]=detect_country(host)
 
@@ -272,6 +277,8 @@ BEGIN{
   dest_host  = host
   dest_loss  = loss+0
   dest_avg   = avg+0
+  dest_best  = best+0
+  dest_wrst  = wrst+0
   dest_stdev = stdev+0
 }
 
@@ -377,7 +384,13 @@ END{
 
   printf("📍 目标节点: %s\n", real_dest)
   printf("📡 丢包率  : %.1f%%\n", dest_loss)
-  printf("⏱ 延迟统计: Avg=%.1f ms, 抖动=%.2f ms\n\n", dest_avg, dest_stdev)
+
+  # 延迟统计：全中文 + 四项指标，平均在第三个
+  print "⏱ 延迟统计："
+  printf("   · 最优延迟: %.1f 毫秒\n", dest_best)
+  printf("   · 最差延迟: %.1f 毫秒\n", dest_wrst)
+  printf("   · 平均延迟: %.1f 毫秒\n", dest_avg)
+  printf("   · 抖动: %.2f 毫秒\n\n", dest_stdev)
 
   # ---------------- 延迟 & 稳定性 & 丢包 评价（区域预判） ----------------
   print "⚙ 延迟评价"
@@ -430,15 +443,15 @@ END{
 
   print "📈 稳定性评价"
   if (dest_loss >= 80){
-  print "- 由于末跳不响应 ICMP，无法准确评估抖动，仅可参考前几跳。"
+    print "- 由于末跳不响应 ICMP，无法准确评估抖动，仅可参考前几跳。"
   } else if (dest_stdev <= 2){
-  print "- 抖动极小，线路非常稳定。"
+    print "- 抖动极小，线路非常稳定。"
   } else if (dest_stdev <= 5){
-  print "- 有轻微抖动，整体还算稳定。"
+    print "- 有轻微抖动，整体还算稳定。"
   } else if (dest_stdev <= 10){
-  print "- 抖动比较明显，实时业务可能会有体感波动。"
+    print "- 抖动比较明显，实时业务可能会有体感波动。"
   } else {
-  print "- 抖动严重，网络波动非常明显。"
+    print "- 抖动严重，网络波动非常明显。"
   }
   print ""
 
@@ -459,7 +472,7 @@ END{
   if (maxHop > 1 && maxJump > 3){
     printf("- 跳数: 第 %d 跳\n", maxHop)
     printf("- 节点: %s\n", h_host[maxHop])
-    printf("  ↑ 平均延迟在此处增加约 %.1f ms\n\n", maxJump)
+    printf("  ↑ 平均延迟在此处增加约 %.1f 毫秒\n\n", maxJump)
   } else {
     print "- 未发现明显的单点延迟跃升。"
     print ""
@@ -493,7 +506,7 @@ END{
 
   # ---------------- 评分 ----------------
   base=60
-  if (rating=="极佳")   base=95
+  if (rating=="极佳")      base=95
   else if (rating=="优秀") base=85
   else if (rating=="一般") base=70
   else if (rating=="较差") base=50
