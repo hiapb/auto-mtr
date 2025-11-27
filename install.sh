@@ -2,7 +2,6 @@
 # hipb
 # 一键 mtr + 自动国家地区识别 + 跨境判断 + 骨干识别 + 评分
 
-
 set -e
 
 command_exists() {
@@ -207,12 +206,12 @@ BEGIN{
   }
   prev=avg
 
-  dest_avg=avg
-  dest_loss=loss
-  dest_stdev=stdev
+  dest_avg=avg+0
+  dest_loss=loss+0       # 强制转为数值
+  dest_stdev=stdev+0
   dest_host=host
-  dest_best=best
-  dest_wrst=wrst
+  dest_best=best+0
+  dest_wrst=wrst+0
 }
 
 END{
@@ -230,8 +229,8 @@ END{
   sR=region(src)
   dR=region(dst)
 
-  print "📍 目标节点: " dest_host
-  print "📡 丢包率  : " dest_loss "%"
+  printf("📍 目标节点: %s\n", dest_host)
+  printf("📡 丢包率  : %.1f%%\n", dest_loss)
   printf("⏱ 延迟统计: Avg=%.1f ms, Best=%.1f ms, Worst=%.1f ms, 抖动=%.2f ms\n\n",
          dest_avg,dest_best,dest_wrst,dest_stdev)
 
@@ -285,9 +284,9 @@ END{
 
   # ------- 丢包 -------
   print "📉 丢包评价"
-  if(dest_loss==0) print "- 末跳无丢包，连通性良好。"
-  else if(dest_loss<3) print "- 少量丢包（<3%），大部分业务可接受。"
-  else print "- 丢包偏高，需谨慎用于关键业务。"
+  if(dest_loss <= 0.0001)       print "- 末跳无丢包，连通性良好。"
+  else if(dest_loss < 3)        print "- 少量丢包（<3%），大部分业务可接受。"
+  else                           print "- 丢包偏高，需谨慎用于关键业务。"
   print ""
 
   # ------- 瓶颈点 -------
